@@ -79,15 +79,12 @@ export interface VoterOut {
   agentStrength?: AgentStrength;
   rejectionReason?: string;
   agentGroup?: string;
-  // ─── Self-Awareness Layer ─────────────────────────────────────────────────
+  // ─── Self-Awareness Layer (informational only — cannot force abstain) ───────
   uncertaintyScore?: number;     // 0.00-1.00
   fakePatternRisk?: number;      // 0.00-1.00
   entropyWarning?: boolean;
   sideOnlyWarning?: boolean;
   contradictionWarning?: boolean;
-  wrongStreak?: number;          // consecutive wrong predictions
-  inCooldown?: boolean;
-  cooldownHandsLeft?: number;
   peerReviewChanged?: boolean;
   peerReviewReason?: string;
   selfAwarenessOverride?: string; // reason hard rule fired

@@ -165,7 +165,6 @@ interface BlackboardEntry {
   confidence: number;
   selfDoubtScore: number;
   fakeSignalWarning: boolean;
-  inCooldown: boolean;
   evidenceUsed: string[];
 }
 
@@ -1185,10 +1184,6 @@ export function runVoters(
       regimeVote: globalShoeState.aiContrib[cfg.shortTag] ?? globalShoeState.regime,
       textureVote: globalShoeState.aiContrib[cfg.shortTag] ?? globalShoeState.texture,
       agentGroup: cfg.agentGroup,
-      // carry over self-awareness memory
-      wrongStreak: prev?.wrongStreak ?? 0,
-      inCooldown: prev?.inCooldown ?? false,
-      cooldownHandsLeft: prev?.cooldownHandsLeft ?? 0,
     };
 
     // Waiting for startHand
@@ -1220,42 +1215,8 @@ export function runVoters(
     let finalConf = agentOut.confidence;
     let voteType: VoteType = vote === "NO_VOTE" ? "NO_VOTE" : memVT;
     if (vote !== "NO_VOTE" && voteType === "NORMAL" && finalConf < 45) voteType = "WEAK";
-
-    // Confidence threshold: 62% required to bet
-    if (vote !== "NO_VOTE" && finalConf < 62) {
-      vote = "NO_VOTE";
-      voteType = "NO_VOTE";
-    }
-
-    // ── MANDATORY SELF-QUESTIONS → HARD SUPPRESSION RULES ─────────────────
-    let selfAwarenessOverride = '';
-    const isCooldown = (baseFields.inCooldown) && (baseFields.cooldownHandsLeft ?? 0) > 0;
-
-    if (vote !== 'NO_VOTE') {
-      if (isCooldown) {
-        // Rule: wrong_streak >= 2 triggers 3-hand cooldown — agent sits out
-        vote = 'NO_VOTE';
-        voteType = 'NO_VOTE';
-        selfAwarenessOverride = 'COOLDOWN';
-      } else if (sa.sideOnlyWarning) {
-        // Rule: if_side_only_warning → vote NO_BET
-        vote = 'NO_VOTE';
-        voteType = 'NO_VOTE';
-        selfAwarenessOverride = 'SIDE_ONLY_WARNING';
-      } else if (sa.fakePatternRisk > 0.70) {
-        // Rule: if_fake_pattern_risk_above_0_70 → vote NO_BET
-        vote = 'NO_VOTE';
-        voteType = 'NO_VOTE';
-        selfAwarenessOverride = 'FAKE_PATTERN_RISK';
-      } else if (sa.entropyWarning && sa.contradictionWarning) {
-        // Rule: if_entropy_warning_and_contradiction_warning → vote NO_BET
-        vote = 'NO_VOTE';
-        voteType = 'NO_VOTE';
-        selfAwarenessOverride = 'ENTROPY+CONTRADICTION';
-      }
-      // Note: if_no_clear_reason is already enforced upstream — runAgent returns NO_BET_OUTPUT
-      // when there is no signal, so agentOut.vote is already NO_VOTE in that case.
-    }
+    // Self-awareness metrics are informational — they cannot force a vote change.
+    // Every agent votes what it computes: B, P, or NO_BET (NO_VOTE).
 
     const agentStrength: VoterOut['agentStrength'] =
       finalConf >= 80 ? 'HIGH' : finalConf >= 62 ? 'MEDIUM' : 'LOW';
@@ -1276,7 +1237,7 @@ export function runVoters(
       pressureScore: agentOut.pressureScore,
       numberPressure: agentOut.numberPressure,
       agentStrength,
-      rejectionReason: selfAwarenessOverride || agentOut.rejectionReason,
+      rejectionReason: agentOut.rejectionReason,
       // self-awareness fields
       uncertaintyScore: sa.uncertaintyScore,
       fakePatternRisk: sa.fakePatternRisk,
@@ -1285,7 +1246,7 @@ export function runVoters(
       contradictionWarning: sa.contradictionWarning,
       peerReviewChanged: false,
       peerReviewReason: '',
-      selfAwarenessOverride,
+      selfAwarenessOverride: '',
     } as VoterOut;
   });
 
@@ -1298,7 +1259,6 @@ export function runVoters(
     confidence: v.confidence,
     selfDoubtScore: v.uncertaintyScore ?? 0,
     fakeSignalWarning: (v.fakePatternRisk ?? 0) > 0.50,
-    inCooldown: v.inCooldown ?? false,
     evidenceUsed: [
       'side',
       ...(Math.abs(v.pressureScore ?? 0) >= 12 ? ['final_number', 'high_low_pressure'] : []),
@@ -1306,97 +1266,45 @@ export function runVoters(
     ],
   }));
 
-  // ── STEP 3: Peer review — each agent reads all 49 reports, may change once ─
-  // Compute peer blackboard stats (exclude self)
-  const activePeers = blackboard.filter(b => b.vote !== 'NO_VOTE' && !b.inCooldown);
-  const peerBCount = activePeers.filter(b => b.vote === 'B').length;
-  const peerPCount = activePeers.filter(b => b.vote === 'P').length;
-  const peerTotal  = activePeers.length;
-  const peerBPct   = peerTotal > 0 ? peerBCount / peerTotal : 0;
-  const peerPPct   = peerTotal > 0 ? peerPCount / peerTotal : 0;
+  // ── STEP 3: Peer review — informational read only, no vote changes ─────────
+  // All 50 agents vote. Peer review provides awareness context but cannot force
+  // any agent to abstain. Votes are locked as computed in step 1.
+  const peerBCount = blackboard.filter(b => b.vote === 'B').length;
+  const peerPCount = blackboard.filter(b => b.vote === 'P').length;
+  const peerBPct   = peerBCount / blackboard.length;
+  const peerPPct   = peerPCount / blackboard.length;
+  void peerBPct; void peerPPct; // available for future informational use
 
-  // Count how many peers raised a fake-signal warning
-  const fakeWarnCount = blackboard.filter(b => b.fakeSignalWarning).length;
-  const blackboardFakeAlarm = fakeWarnCount > 20; // >40% of all agents flagged fake risk
+  const finalVoters: VoterOut[] = firstPass;
 
-  const finalVoters: VoterOut[] = firstPass.map(v => {
-    // Only active voters participate in peer review
-    if (v.vote === 'NO_VOTE') return v;
+  // ── STEP 4: Votes are locked ────────────────────────────────────────────────
 
-    let peerChanged = false;
-    let peerReason = '';
-    let newVote: AIVote = v.vote;
-
-    // Peer review rule 1: high uncertainty + disagrees with peer majority → NO_BET
-    if ((v.uncertaintyScore ?? 0) > 0.50) {
-      const peerMajority: AIVote | null = peerBPct > peerPPct + 0.10 ? 'B'
-        : peerPPct > peerBPct + 0.10 ? 'P'
-        : null;
-      if (peerMajority !== null && v.vote !== peerMajority) {
-        newVote = 'NO_VOTE';
-        peerChanged = true;
-        peerReason = 'UNCERTAINTY_DISAGREES_WITH_PEERS';
-      }
-    }
-
-    // Peer review rule 2: blackboard-wide fake alarm + this agent has elevated risk
-    if (!peerChanged && blackboardFakeAlarm && (v.fakePatternRisk ?? 0) > 0.50) {
-      newVote = 'NO_VOTE';
-      peerChanged = true;
-      peerReason = 'PEER_FAKE_SIGNAL_CONSENSUS';
-    }
-
-    // Peer review rule 3: very few active peers = low confirmation → high-uncertainty agents abstain
-    if (!peerChanged && peerTotal < 8 && (v.uncertaintyScore ?? 0) > 0.40) {
-      newVote = 'NO_VOTE';
-      peerChanged = true;
-      peerReason = 'TOO_FEW_PEER_CONFIRMATIONS';
-    }
-
-    if (!peerChanged) return v;
-
-    return {
-      ...v,
-      vote: newVote,
-      voteType: 'NO_VOTE' as VoteType,
-      peerReviewChanged: true,
-      peerReviewReason: peerReason,
-    };
-  });
-
-  // ── STEP 4: Votes are locked (no further changes) ──────────────────────────
-
-  // ── STEP 5: Equal-weight consensus with 60% threshold ──────────────────────
-  const activeVoters = finalVoters.filter(v => v.vote !== 'NO_VOTE');
-  const bCount    = activeVoters.filter(v => v.vote === 'B').length;
-  const pCount    = activeVoters.filter(v => v.vote === 'P').length;
-  const tCount    = activeVoters.filter(v => v.vote === 'T').length;
-  const noVoteCount = finalVoters.length - activeVoters.length;
-  const activeTotal = activeVoters.length;
-
-  const bPct = activeTotal > 0 ? bCount / activeTotal : 0;
-  const pPct = activeTotal > 0 ? pCount / activeTotal : 0;
+  // ── STEP 5: Equal-weight consensus — all 50 votes counted ──────────────────
+  // B if ≥30 votes for B, P if ≥30 votes for P, else NO_BET
+  const bCount      = finalVoters.filter(v => v.vote === 'B').length;
+  const pCount      = finalVoters.filter(v => v.vote === 'P').length;
+  const tCount      = finalVoters.filter(v => v.vote === 'T').length;
+  const noVoteCount = finalVoters.filter(v => v.vote === 'NO_VOTE').length;
+  const total       = finalVoters.length; // always 50
 
   let recommendation: AIVote = 'NO_VOTE';
   let noBetReason = '';
-  if (bPct >= 0.60)      { recommendation = 'B'; }
-  else if (pPct >= 0.60) { recommendation = 'P'; }
-  else if (activeTotal === 0) { noBetReason = 'NO_ACTIVE_VOTES'; }
-  else { noBetReason = 'BELOW_60_THRESHOLD'; }
+  if (bCount >= 30)      { recommendation = 'B'; }
+  else if (pCount >= 30) { recommendation = 'P'; }
+  else                   { noBetReason = 'BELOW_30_VOTE_THRESHOLD'; }
 
-  const winVotePct = Math.max(bPct, pPct) * 100;
+  const winVotePct = Math.max(bCount, pCount) / total * 100;
   const sorted2    = [bCount, pCount, tCount].sort((a, b) => b - a);
-  const voteGapPct = activeTotal > 0 ? ((sorted2[0] - sorted2[1]) / activeTotal) * 100 : 0;
+  const voteGapPct = ((sorted2[0] - sorted2[1]) / total) * 100;
 
   let highestVote: AIVote = 'NO_VOTE';
-  if (activeTotal > 0) {
-    if (bCount >= pCount && bCount >= tCount) highestVote = 'B';
-    else if (pCount >= bCount && pCount >= tCount) highestVote = 'P';
-    else highestVote = 'T';
-  }
+  if (bCount >= pCount && bCount >= tCount && bCount > 0) highestVote = 'B';
+  else if (pCount >= bCount && pCount >= tCount && pCount > 0) highestVote = 'P';
+  else if (tCount > 0) highestVote = 'T';
 
-  const ensembleConfidence = activeTotal > 0
-    ? Math.round(activeVoters.reduce((s, v) => s + v.confidence, 0) / activeTotal)
+  const activeVoters = finalVoters.filter(v => v.vote !== 'NO_VOTE');
+  const ensembleConfidence = activeVoters.length > 0
+    ? Math.round(activeVoters.reduce((s, v) => s + v.confidence, 0) / activeVoters.length)
     : 0;
 
   return {
@@ -1409,13 +1317,13 @@ export function runVoters(
       playerVotes: pCount,
       tieVotes: tCount,
       noVoteCount,
-      totalActiveVotes: activeTotal,
+      totalActiveVotes: total - noVoteCount,
       winVotePct: Math.round(winVotePct * 10) / 10,
       voteGapPct: Math.round(voteGapPct * 10) / 10,
       consensus: recommendation === 'NO_VOTE' ? 'NO_BET' : getConsensus(winVotePct),
       highestVote,
       ensembleConfidence,
-      agreementCount: activeTotal,
+      agreementCount: total - noVoteCount,
     },
   };
 }
@@ -1431,33 +1339,6 @@ export function updateVoterStats(voters: VoterOut[], actualSide: Side): VoterOut
     else if (isPush)        { newAI.push++;    newAI.allTimePush++; }
     else if (vote === actualSide) { newAI.correct++; newAI.allTimeCorrect++; }
     else                    { newAI.wrong++;   newAI.allTimeWrong++; }
-
-    // ── Wrong-streak & cooldown tracking ──────────────────────────────────────
-    const wasCorrect = vote !== 'NO_VOTE' && !isPush && vote === actualSide;
-    const wasWrong   = vote !== 'NO_VOTE' && !isPush && vote !== actualSide;
-
-    if (wasWrong) {
-      newAI.wrongStreak = (newAI.wrongStreak ?? 0) + 1;
-    } else if (wasCorrect) {
-      newAI.wrongStreak = 0;
-    }
-    // NO_VOTE or push: wrongStreak stays unchanged (sitting out doesn't reset it)
-
-    // Tick down active cooldown
-    if (newAI.inCooldown) {
-      const handsLeft = Math.max(0, (newAI.cooldownHandsLeft ?? 0) - 1);
-      newAI.cooldownHandsLeft = handsLeft;
-      if (handsLeft === 0) {
-        newAI.inCooldown    = false;
-        newAI.wrongStreak   = 0; // cleared after serving full cooldown
-      }
-    }
-
-    // Trigger new cooldown when wrong_streak reaches 2 and not already cooling
-    if (!newAI.inCooldown && (newAI.wrongStreak ?? 0) >= 2) {
-      newAI.inCooldown        = true;
-      newAI.cooldownHandsLeft = 3;
-    }
 
     return newAI;
   });
@@ -1480,7 +1361,6 @@ export function initVoters(): VoterOut[] {
     // self-awareness defaults
     uncertaintyScore: 0, fakePatternRisk: 0,
     entropyWarning: false, sideOnlyWarning: false, contradictionWarning: false,
-    wrongStreak: 0, inCooldown: false, cooldownHandsLeft: 0,
     peerReviewChanged: false, peerReviewReason: '', selfAwarenessOverride: '',
   }));
 }
@@ -1494,11 +1374,10 @@ export function archiveVoters(voters: VoterOut[]): VoterOut[] {
     correct: 0, wrong: 0, push: 0, skipped: 0, pendingStateKey: "",
     pressureScore: 0, numberPressure: 'MIXED', agentStrength: 'LOW' as const,
     rejectionReason: '', agentGroup: v.agentGroup,
-    // reset self-awareness state for new shoe (cooldown/streak carry over to next shoe intentionally)
+    // reset self-awareness state for new shoe
     uncertaintyScore: 0, fakePatternRisk: 0,
     entropyWarning: false, sideOnlyWarning: false, contradictionWarning: false,
     peerReviewChanged: false, peerReviewReason: '', selfAwarenessOverride: '',
-    // wrongStreak, inCooldown, cooldownHandsLeft are preserved across shoe boundary
   }));
 }
 
