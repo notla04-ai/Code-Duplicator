@@ -113,6 +113,19 @@ export interface FinalDecision {
   highestVote: AIVote;
   ensembleConfidence: number;
   agreementCount: number;
+  patternType: 'dragon' | 'chop' | 'highPressure' | 'mixed';
+}
+
+export interface PatternTypeEntry {
+  hits: number;
+  trials: number;
+}
+
+export interface PatternTypeMemory {
+  dragon:       PatternTypeEntry;
+  chop:         PatternTypeEntry;
+  highPressure: PatternTypeEntry;
+  mixed:        PatternTypeEntry;
 }
 
 export interface PerformanceStats {
@@ -233,6 +246,7 @@ export interface AppState {
   highestVotePerf: PerformanceStats;
   pnl: PnLState;
   pendingDecision: FinalDecision | null;
+  patternTypeMemory: PatternTypeMemory;
   triggers: Trigger[];
   triggerAlerts: TriggerAlert[];
   autoSaveSwitch: boolean;

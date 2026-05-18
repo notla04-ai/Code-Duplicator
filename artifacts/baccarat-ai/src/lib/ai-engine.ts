@@ -14,6 +14,7 @@ import type {
   FinalDecision,
   ConsensusLevel,
   GlobalShoeState,
+  PatternTypeMemory,
 } from "./types";
 
 // ─── Pressure Encoding ────────────────────────────────────────────────────────
@@ -281,12 +282,7 @@ const AGENT_CONFIGS: AgentConfig[] = [
   { id: 'e33_low_after_hi', name: 'LowAfterHighAI',    shortTag: 'LAH', startHand: 4, reactionSpeed: 'NORMAL', skill: 'decay',          skillTag: 'LAH', skillDesc: 'LOW after HIGH — pressure decay signal, suppresses continuation bet', agentGroup: 'E-TRANS' },
   { id: 'e34_hi_after_low', name: 'HighAfterLowAI',    shortTag: 'HAL', startHand: 4, reactionSpeed: 'NORMAL', skill: 'recovery',       skillTag: 'HAL', skillDesc: 'HIGH after LOW — pressure recovery signal, validates continuation bet', agentGroup: 'E-TRANS' },
 
-  // Group F: Entropy / Signal-Noise critics (35-40)
-  { id: 'f35_side_entropy',  name: 'SideEntropyAI',     shortTag: 'SENT', startHand: 6,  reactionSpeed: 'SLOW',   skill: 'entropy-critic',    skillTag: 'ENT', skillDesc: 'Side randomness critic — rejects bet when B/P sequence entropy is too high', agentGroup: 'F-ENTROPY' },
-  { id: 'f36_num_entropy',   name: 'NumberEntropyAI',   shortTag: 'NENT', startHand: 6,  reactionSpeed: 'SLOW',   skill: 'number-noise',      skillTag: 'NEN', skillDesc: 'Number randomness monitor — warns when final numbers are too random', agentGroup: 'F-ENTROPY' },
-  { id: 'f37_hl_entropy',    name: 'HighLowEntropyAI',  shortTag: 'HLNT', startHand: 6,  reactionSpeed: 'SLOW',   skill: 'band-entropy',      skillTag: 'HLE', skillDesc: 'HIGH/LOW band randomness — identifies mixed pressure that kills edge', agentGroup: 'F-ENTROPY' },
-  { id: 'f38_volatility',    name: 'VolatilityAI',      shortTag: 'VOLT', startHand: 6,  reactionSpeed: 'NORMAL', skill: 'volatility',        skillTag: 'VLT', skillDesc: 'Side flips + number jumps + pressure instability — high volatility → NO_BET', agentGroup: 'F-ENTROPY' },
-  { id: 'f39_chaos',         name: 'ChaosDetectionAI',  shortTag: 'CHOS', startHand: 8,  reactionSpeed: 'SLOW',   skill: 'chaos-detection',   skillTag: 'CHS', skillDesc: 'Entropy + volatility + road/window disagreement — full chaos critic', agentGroup: 'F-ENTROPY' },
+  // Group F: Stochastic (SNR — sole survivor; f35-f39 replaced by adversarial critics)
   { id: 'f40_snr',           name: 'SignalToNoiseAI',   shortTag: 'SNR',  startHand: 8,  reactionSpeed: 'NORMAL', skill: 'signal-to-noise',   skillTag: 'SNR', skillDesc: 'Pressure score vs randomness score vs contradiction — SNR ratio critic', agentGroup: 'F-ENTROPY' },
 
   // Group G: Regime classification (41-45)
@@ -296,12 +292,17 @@ const AGENT_CONFIGS: AgentConfig[] = [
   { id: 'g44_player_bias',    name: 'PlayerBiasRegimeAI',shortTag: 'PBRG', startHand: 10, reactionSpeed: 'SLOW',   skill: 'bias-detection', skillTag: 'PBR', skillDesc: 'P ratio + P high pressure + P killshot rate — player bias regime', agentGroup: 'G-REGIME' },
   { id: 'g45_exhaustion',     name: 'ExhaustionRegimeAI',shortTag: 'EXRG', startHand: 10, reactionSpeed: 'SLOW',   skill: 'exhaustion',     skillTag: 'EXH', skillDesc: 'Overextension + weak numbers + reversal pressure — exhaustion regime classifier', agentGroup: 'G-REGIME' },
 
-  // Group H: Meta / critic agents (46-50)
-  { id: 'h46_hist_sim',    name: 'HistoricalSimilarityAI', shortTag: 'HSIM', startHand: 6,  reactionSpeed: 'SLOW',   skill: 'historical',     skillTag: 'HSM', skillDesc: 'Encoded pattern signature + side owner + pressure sequence — historical match', agentGroup: 'H-META' },
-  { id: 'h47_calibration', name: 'CalibrationAI',          shortTag: 'CALB', startHand: 10, reactionSpeed: 'SLOW',   skill: 'calibration',    skillTag: 'CAL', skillDesc: 'Agent past accuracy + confidence error + signal type — calibration weight', agentGroup: 'H-META' },
-  { id: 'h48_contradict',  name: 'ContradictionAI',        shortTag: 'CTRD', startHand: 6,  reactionSpeed: 'NORMAL', skill: 'contradiction',  skillTag: 'CTR', skillDesc: 'Agent disagreement + side/number conflict + window conflict — contradiction critic', agentGroup: 'H-META' },
-  { id: 'h49_risk_filter', name: 'RiskFilterAI',           shortTag: 'RISK', startHand: 8,  reactionSpeed: 'NORMAL', skill: 'risk-filter',    skillTag: 'RSK', skillDesc: 'Confidence + entropy + volatility + no-bet pressure — combined risk critic', agentGroup: 'H-META' },
-  { id: 'h50_consensus',   name: 'FinalConsensusAI',       shortTag: 'FCON', startHand: 10, reactionSpeed: 'SLOW',   skill: 'consensus',      skillTag: 'CON', skillDesc: 'All agent outputs + weighted pressure + critic approval — final consensus aggregator', agentGroup: 'H-META' },
+  // Group N: Adversarial Critics (n01-n10) — attack dominant signal to destroy fake consensus
+  { id: 'n01_dragon_buster',     name: 'DragonBusterAI',        shortTag: 'DRB',  startHand: 5,  reactionSpeed: 'FAST',   skill: 'adversarial', skillTag: 'ADV', skillDesc: 'Attacks streaks ≥5 — votes AGAINST dragon continuation; strength boosted when dragons have been historically failing', agentGroup: 'N-ADV' },
+  { id: 'n02_weak_dragon',       name: 'WeakDragonAttackerAI',  shortTag: 'WDA',  startHand: 4,  reactionSpeed: 'FAST',   skill: 'adversarial', skillTag: 'ADV', skillDesc: 'Attacks streaks ≥3 built on LOW numbers — fake dragon = vote opposite streak direction', agentGroup: 'N-ADV' },
+  { id: 'n03_chop_buster',       name: 'ChopBusterAI',          shortTag: 'CHB',  startHand: 7,  reactionSpeed: 'NORMAL', skill: 'adversarial', skillTag: 'ADV', skillDesc: 'Attacks extreme alternation ≥72% rate — bets continuation because extreme chop is due to break', agentGroup: 'N-ADV' },
+  { id: 'n04_pressure_skeptic',  name: 'PressureSkepticAI',     shortTag: 'PSK',  startHand: 5,  reactionSpeed: 'NORMAL', skill: 'adversarial', skillTag: 'ADV', skillDesc: 'Attacks high pressure built on LOW numbers — fake pressure = vote opposite apparent signal', agentGroup: 'N-ADV' },
+  { id: 'n05_exhaustion',        name: 'ExhaustionHunterAI',    shortTag: 'EXH',  startHand: 5,  reactionSpeed: 'NORMAL', skill: 'adversarial', skillTag: 'ADV', skillDesc: 'Geometric mean exhaustion detector — votes reversal when streak length > E[streak]*1.5', agentGroup: 'N-ADV' },
+  { id: 'n06_window_conflict',   name: 'WindowConflictAI',      shortTag: 'WCF',  startHand: 8,  reactionSpeed: 'SLOW',   skill: 'adversarial', skillTag: 'ADV', skillDesc: 'Attacks recency signal when short/long windows conflict — follows long-term over recent noise', agentGroup: 'N-ADV' },
+  { id: 'n07_regime_skeptic',    name: 'RegimeSkepticAI',       shortTag: 'RSK',  startHand: 8,  reactionSpeed: 'SLOW',   skill: 'adversarial', skillTag: 'ADV', skillDesc: 'Attacks any prediction in mixed/volatile regime — votes opposite in unstable shoe environment', agentGroup: 'N-ADV' },
+  { id: 'n08_transition_attack', name: 'TransitionAttackerAI',  shortTag: 'TRA',  startHand: 10, reactionSpeed: 'SLOW',   skill: 'adversarial', skillTag: 'ADV', skillDesc: 'Attacks predictions at regime-shift points — first/second half chop rate divergence trigger', agentGroup: 'N-ADV' },
+  { id: 'n09_number_trap',       name: 'NumberTrapAttackerAI',  shortTag: 'NTA',  startHand: 5,  reactionSpeed: 'NORMAL', skill: 'adversarial', skillTag: 'ADV', skillDesc: 'Attacks apparent signal when ≥62% of recent numbers are LOW — built on weak number foundation', agentGroup: 'N-ADV' },
+  { id: 'n10_entropy_guard',     name: 'EntropyGuardAI',        shortTag: 'ENG',  startHand: 8,  reactionSpeed: 'SLOW',   skill: 'adversarial', skillTag: 'ADV', skillDesc: 'Entropy environment guard — NO_BET above 0.87 entropy, actively OPPOSE signal above 0.93', agentGroup: 'N-ADV' },
 ];
 
 // ─── Agent run logic ──────────────────────────────────────────────────────────
@@ -311,6 +312,7 @@ function runAgent(
   hands: HandResult[],
   encoded: EncodedHand[],
   gs: GlobalShoeState,
+  ptm: PatternTypeMemory,
 ): AgentOutput {
   const bp = bpEncoded(encoded);
   const id = cfg.id;
@@ -623,71 +625,7 @@ function runAgent(
     return { vote: ps > 0 ? 'B' : 'P', confidence: Math.min(conf, 90), pressureScore: Math.round(ps * 100), numberPressure: last.band, rejectionReason: '' };
   }
 
-  // ── GROUP F: Entropy critics ───────────────────────────────────────────────────
-  if (id === 'f35_side_entropy') {
-    if (bp.length < 6) return NO_BET_OUTPUT('INSUFFICIENT_DATA');
-    const ent = sideEntropy(bp);
-    if (ent > 0.9) return NO_BET_OUTPUT('SIDE_ENTROPY_TOO_HIGH');
-    const ps = weightedPressureScore(bp.slice(-8));
-    const conf = Math.round((1 - ent) * 60 + Math.abs(ps) * 30);
-    if (conf < 35) return NO_BET_OUTPUT('ENTROPY_CONFIDENCE_LOW', Math.round(ps * 100));
-    return { vote: ps > 0 ? 'B' : 'P', confidence: conf, pressureScore: Math.round(ps * 100), numberPressure: dominantBand(bp.slice(-8)), rejectionReason: '' };
-  }
-
-  if (id === 'f36_num_entropy') {
-    if (bp.length < 6) return NO_BET_OUTPUT('INSUFFICIENT_DATA');
-    const nums = bp.slice(-10).map(e => e.finalNumber);
-    const unique = new Set(nums).size;
-    if (unique > 7) return NO_BET_OUTPUT('NUMBER_ENTROPY_TOO_HIGH');
-    const ps = weightedPressureScore(bp.slice(-8));
-    const conf = Math.round((1 - unique / 10) * 50 + Math.abs(ps) * 30);
-    if (conf < 30) return NO_BET_OUTPUT('NUMBER_NOISE_UNRESOLVABLE');
-    return { vote: ps > 0 ? 'B' : 'P', confidence: conf, pressureScore: Math.round(ps * 100), numberPressure: dominantBand(bp.slice(-8)), rejectionReason: '' };
-  }
-
-  if (id === 'f37_hl_entropy') {
-    if (bp.length < 6) return NO_BET_OUTPUT('INSUFFICIENT_DATA');
-    const recent = bp.slice(-10);
-    const hi = recent.filter(e => e.band !== 'LOW').length;
-    const lo = recent.filter(e => e.band === 'LOW').length;
-    const p = hi / recent.length; const q = 1 - p;
-    const ent = (p > 0 && q > 0) ? -(p * Math.log2(p) + q * Math.log2(q)) : 0;
-    if (ent > 0.92) return NO_BET_OUTPUT('HIGH_LOW_ENTROPY_MIXED');
-    const ps = weightedPressureScore(recent.filter(e => e.band !== 'LOW'));
-    const conf = Math.round((1 - ent) * 70);
-    if (conf < 30) return NO_BET_OUTPUT('HL_ENTROPY_CONFIDENCE_LOW');
-    return { vote: ps > 0 ? 'B' : 'P', confidence: conf, pressureScore: Math.round(ps * 100), numberPressure: hi > lo ? 'HIGH' : 'LOW', rejectionReason: '' };
-  }
-
-  if (id === 'f38_volatility') {
-    if (bp.length < 6) return NO_BET_OUTPUT('INSUFFICIENT_DATA');
-    const recent = bp.slice(-10);
-    let sideFlips = 0;
-    for (let i = 1; i < recent.length; i++) if (recent[i].side !== recent[i-1].side) sideFlips++;
-    let numJumps = 0;
-    for (let i = 1; i < recent.length; i++) if (Math.abs(recent[i].finalNumber - recent[i-1].finalNumber) >= 4) numJumps++;
-    const flipRate2 = sideFlips / (recent.length - 1);
-    const jumpRate = numJumps / (recent.length - 1);
-    if (flipRate2 > 0.7 && jumpRate > 0.4) return NO_BET_OUTPUT('HIGH_VOLATILITY_DETECTED');
-    const ps = weightedPressureScore(recent);
-    const conf = Math.round((1 - flipRate2 * 0.5) * Math.abs(ps) * 100);
-    if (conf < 30) return NO_BET_OUTPUT('VOLATILITY_SUPPRESSES_SIGNAL');
-    return { vote: ps > 0 ? 'B' : 'P', confidence: conf, pressureScore: Math.round(ps * 100), numberPressure: dominantBand(recent), rejectionReason: '' };
-  }
-
-  if (id === 'f39_chaos') {
-    if (bp.length < 8) return NO_BET_OUTPUT('INSUFFICIENT_DATA');
-    const ent = sideEntropy(bp.slice(-12));
-    const cr = chopRate(encoded, 10);
-    const ps = Math.abs(weightedPressureScore(bp.slice(-8)));
-    const chaosScore = ent * 0.4 + (Math.abs(cr - 0.5) < 0.1 ? 0.4 : 0) + (ps < 0.2 ? 0.3 : 0);
-    if (chaosScore > 0.5) return NO_BET_OUTPUT('FULL_CHAOS_DETECTED');
-    const signal = weightedPressureScore(bp.slice(-8));
-    const conf = Math.round((1 - chaosScore) * Math.abs(signal) * 100);
-    if (conf < 30) return NO_BET_OUTPUT('CHAOS_CONFIDENCE_LOW');
-    return { vote: signal > 0 ? 'B' : 'P', confidence: conf, pressureScore: Math.round(signal * 100), numberPressure: dominantBand(bp.slice(-8)), rejectionReason: '' };
-  }
-
+  // ── GROUP F: Stochastic (f40_snr) ────────────────────────────────────────────
   if (id === 'f40_snr') {
     if (bp.length < 8) return NO_BET_OUTPUT('INSUFFICIENT_DATA');
     const signal = Math.abs(weightedPressureScore(bp.slice(-12)));
@@ -757,75 +695,173 @@ function runAgent(
     return { vote: oppSide, confidence: conf, pressureScore: oppSide === 'B' ? conf : -conf, numberPressure: 'LOW', rejectionReason: '' };
   }
 
-  // ── GROUP H: Meta agents ──────────────────────────────────────────────────────
-  if (id === 'h46_hist_sim') {
-    if (bp.length < 6) return NO_BET_OUTPUT('INSUFFICIENT_DATA');
-    // Pattern signature from last 6 encoded hands
-    const sig = bp.slice(-6).map(e => `${e.side}${e.band[0]}`).join('');
-    const ps = weightedPressureScore(bp.slice(-6));
-    const conf = Math.round(Math.abs(ps) * 80);
-    if (conf < 35 || sig.length < 3) return NO_BET_OUTPUT('PATTERN_SIGNATURE_WEAK', Math.round(ps * 100));
-    return { vote: ps > 0 ? 'B' : 'P', confidence: conf, pressureScore: Math.round(ps * 100), numberPressure: dominantBand(bp.slice(-6)), rejectionReason: '' };
-  }
-
-  if (id === 'h47_calibration') {
-    if (bp.length < 10) return NO_BET_OUTPUT('INSUFFICIENT_DATA');
-    // Use full shoe pressure as calibrated view
-    const fullPs = weightedPressureScore(bp);
-    const shortPs = weightedPressureScore(bp.slice(-6));
-    // Only bet when full shoe and short window agree
-    if (Math.sign(fullPs) !== Math.sign(shortPs)) return NO_BET_OUTPUT('CALIBRATION_CONFLICT');
-    const conf = Math.round((Math.abs(fullPs) + Math.abs(shortPs)) / 2 * 100);
-    if (conf < 35) return NO_BET_OUTPUT('CALIBRATION_CONFIDENCE_LOW');
-    return { vote: fullPs > 0 ? 'B' : 'P', confidence: conf, pressureScore: Math.round(fullPs * 100), numberPressure: dominantBand(bp.slice(-8)), rejectionReason: '' };
-  }
-
-  if (id === 'h48_contradict') {
-    if (bp.length < 6) return NO_BET_OUTPUT('INSUFFICIENT_DATA');
-    const shortPs = weightedPressureScore(bp.slice(-4));
-    const longPs = weightedPressureScore(bp);
-    const sideConflict = Math.sign(shortPs) !== Math.sign(longPs);
-    if (sideConflict) return NO_BET_OUTPUT('AGENT_WINDOW_CONTRADICTION');
-    const ps = weightedPressureScore(bp.slice(-8));
-    const conf = Math.round(Math.abs(ps) * 80);
-    if (conf < 40) return NO_BET_OUTPUT('CONTRADICTION_CONFIDENCE_LOW');
-    return { vote: ps > 0 ? 'B' : 'P', confidence: conf, pressureScore: Math.round(ps * 100), numberPressure: dominantBand(bp.slice(-8)), rejectionReason: '' };
-  }
-
-  if (id === 'h49_risk_filter') {
-    if (bp.length < 8) return NO_BET_OUTPUT('INSUFFICIENT_DATA');
-    const ent = sideEntropy(bp.slice(-12));
-    const ps = weightedPressureScore(bp.slice(-8));
-    const cr = chopRate(encoded, 8);
-    const streakInfo = currentStreak(encoded);
-    // Risk composite
-    const riskScore = ent * 0.35 + (Math.abs(cr - 0.5) < 0.15 ? 0.25 : 0) + (ps < 0.1 ? 0.4 : 0);
-    if (riskScore > 0.45) return NO_BET_OUTPUT('COMPOSITE_RISK_TOO_HIGH');
-    const conf = Math.round((1 - riskScore) * Math.abs(ps) * 120);
-    if (conf < 40) return NO_BET_OUTPUT('RISK_ADJUSTED_CONFIDENCE_LOW');
-    return { vote: ps > 0 ? 'B' : 'P', confidence: Math.min(conf, 90), pressureScore: Math.round(ps * 100), numberPressure: dominantBand(bp.slice(-8)), rejectionReason: '' };
-  }
-
-  if (id === 'h50_consensus') {
-    if (bp.length < 10) return NO_BET_OUTPUT('INSUFFICIENT_DATA');
-    // Multi-window consensus
-    const w6 = weightedPressureScore(bp.slice(-6));
-    const w12 = weightedPressureScore(bp.slice(-12));
-    const wFull = weightedPressureScore(bp);
-    const agree = [w6, w12, wFull].filter(s => s > 0.1).length;
-    const disagree = [w6, w12, wFull].filter(s => s < -0.1).length;
-    if (agree === 3) {
-      const avg = (w6 + w12 + wFull) / 3;
-      return { vote: 'B', confidence: Math.min(Math.round(avg * 100) + 10, 95), pressureScore: Math.round(avg * 100), numberPressure: dominantBand(bp.slice(-8)), rejectionReason: '' };
-    }
-    if (disagree === 3) {
-      const avg = Math.abs((w6 + w12 + wFull) / 3);
-      return { vote: 'P', confidence: Math.min(Math.round(avg * 100) + 10, 95), pressureScore: -Math.round(avg * 100), numberPressure: dominantBand(bp.slice(-8)), rejectionReason: '' };
-    }
-    return NO_BET_OUTPUT('CONSENSUS_WINDOWS_DISAGREE');
+  // ── GROUP N: Adversarial Critics ─────────────────────────────────────────────
+  if (id.startsWith('n')) {
+    return runAdversarialCritic(id, hands, encoded, gs, ptm);
   }
 
   return NO_BET_OUTPUT('UNKNOWN_AGENT');
+}
+
+// ─── Pattern Type Classification ─────────────────────────────────────────────
+
+function classifyCurrentPatternType(encoded: EncodedHand[]): 'dragon' | 'chop' | 'highPressure' | 'mixed' {
+  const bp = bpEncoded(encoded);
+  if (bp.length < 3) return 'mixed';
+  const streak = currentStreak(encoded);
+  if (streak.side !== null && streak.length >= 4) return 'dragon';
+  if (bp.length >= 5) {
+    const cr = chopRate(encoded, 8);
+    if (cr >= 0.65) return 'chop';
+  }
+  const ps = Math.abs(weightedPressureScore(bp.slice(-6)));
+  if (ps >= 0.55) return 'highPressure';
+  return 'mixed';
+}
+
+// ─── Adversarial Critics ─────────────────────────────────────────────────────
+
+function runAdversarialCritic(
+  id: string,
+  hands: HandResult[],
+  encoded: EncodedHand[],
+  gs: GlobalShoeState,
+  ptm: PatternTypeMemory,
+): AgentOutput {
+  const bp = bpEncoded(encoded);
+  if (bp.length < 2) return NO_BET_OUTPUT('INSUFFICIENT_DATA');
+  void hands;
+
+  const apparentPs   = weightedPressureScore(bp.slice(-6));
+  const apparentSide: AIVote = apparentPs > 0 ? 'B' : apparentPs < 0 ? 'P' : 'NO_VOTE';
+  const oppSide      = (s: AIVote): AIVote => s === 'B' ? 'P' : s === 'P' ? 'B' : 'NO_VOTE';
+
+  // Pattern failure history → boost adversarial aggression when that type has been losing
+  const dragonFailRate = ptm.dragon.trials >= 5       ? 1 - ptm.dragon.hits / ptm.dragon.trials             : 0.5;
+  const chopFailRate   = ptm.chop.trials >= 5         ? 1 - ptm.chop.hits / ptm.chop.trials                 : 0.5;
+  const presFailRate   = ptm.highPressure.trials >= 5 ? 1 - ptm.highPressure.hits / ptm.highPressure.trials : 0.5;
+
+  if (id === 'n01_dragon_buster') {
+    const streak = currentStreak(encoded);
+    if (streak.side === null || streak.length < 5) return NO_BET_OUTPUT('NO_DRAGON_TO_BUST');
+    const boost = dragonFailRate > 0.65 ? 15 : 0;
+    const conf  = Math.min(40 + streak.length * 5 + boost, 90);
+    const side: AIVote = streak.side === 'B' ? 'P' : 'B';
+    return { vote: side, confidence: conf, pressureScore: side === 'B' ? conf : -conf, numberPressure: 'LOW', rejectionReason: 'ADV_DRAGON_BUST' };
+  }
+
+  if (id === 'n02_weak_dragon') {
+    const streak = currentStreak(encoded);
+    if (streak.side === null || streak.length < 3) return NO_BET_OUTPUT('STREAK_TOO_SHORT');
+    if (streak.avgScore >= 0.40) return NO_BET_OUTPUT('STREAK_QUALITY_OK');
+    const boost = dragonFailRate > 0.65 ? 12 : 0;
+    const conf  = Math.min(45 + Math.round((0.40 - streak.avgScore) * 120) + boost, 82);
+    const side: AIVote = streak.side === 'B' ? 'P' : 'B';
+    return { vote: side, confidence: conf, pressureScore: side === 'B' ? conf : -conf, numberPressure: 'LOW', rejectionReason: 'ADV_FAKE_DRAGON' };
+  }
+
+  if (id === 'n03_chop_buster') {
+    if (bp.length < 7) return NO_BET_OUTPUT('INSUFFICIENT_DATA');
+    const cr = chopRate(encoded, 8);
+    if (cr < 0.72) return NO_BET_OUTPUT('CHOP_NOT_EXTREME');
+    // Extreme chop running too long → bet CONTINUATION (break incoming)
+    const last     = bp[bp.length - 1];
+    const contSide = last.side as AIVote;
+    const boost    = chopFailRate > 0.65 ? 12 : 0;
+    const conf     = Math.min(Math.round(cr * 65) + boost, 82);
+    return { vote: contSide, confidence: conf, pressureScore: contSide === 'B' ? conf : -conf, numberPressure: dominantBand(bp.slice(-8)), rejectionReason: 'ADV_CHOP_BUST' };
+  }
+
+  if (id === 'n04_pressure_skeptic') {
+    if (bp.length < 5) return NO_BET_OUTPUT('INSUFFICIENT_DATA');
+    const ps     = weightedPressureScore(bp.slice(-8));
+    if (Math.abs(ps) < 0.55) return NO_BET_OUTPUT('PRESSURE_NOT_HIGH_ENOUGH');
+    const recent   = bp.slice(-8);
+    const lowRatio = recent.filter(e => e.band === 'LOW').length / recent.length;
+    if (lowRatio < 0.55) return NO_BET_OUTPUT('NUMBERS_ARE_QUALITY');
+    // High pressure built on LOW numbers → fake → attack it
+    const boost = presFailRate > 0.65 ? 12 : 0;
+    const conf  = Math.min(40 + Math.round(lowRatio * 50) + boost, 82);
+    const side  = oppSide(ps > 0 ? 'B' : 'P');
+    return { vote: side, confidence: conf, pressureScore: side === 'B' ? conf : -conf, numberPressure: 'LOW', rejectionReason: 'ADV_FAKE_PRESSURE' };
+  }
+
+  if (id === 'n05_exhaustion') {
+    const streak = currentStreak(encoded);
+    if (streak.side === null || streak.length < 3) return NO_BET_OUTPUT('NO_STREAK');
+    // Geometric mean: E[run length] = 1 / (1 - p_continuation)
+    const sideCount  = bp.filter(e => e.side === streak.side).length;
+    const pCont      = (sideCount + 0.5) / (bp.length + 1);
+    const expectedLen = pCont > 0.01 ? 1 / (1 - pCont) : 10;
+    if (streak.length < expectedLen * 1.5) return NO_BET_OUTPUT('STREAK_WITHIN_EXPECTED');
+    const side: AIVote = streak.side === 'B' ? 'P' : 'B';
+    const conf = Math.min(40 + Math.round((streak.length / expectedLen - 1.5) * 25), 82);
+    return { vote: side, confidence: conf, pressureScore: side === 'B' ? conf : -conf, numberPressure: 'LOW', rejectionReason: 'ADV_EXHAUSTION' };
+  }
+
+  if (id === 'n06_window_conflict') {
+    if (bp.length < 8) return NO_BET_OUTPUT('INSUFFICIENT_DATA');
+    const shortPs = weightedPressureScore(bp.slice(-4));
+    const longPs  = weightedPressureScore(bp.slice(-14));
+    if (Math.abs(shortPs) < 0.10 || Math.abs(longPs) < 0.10) return NO_BET_OUTPUT('SIGNALS_TOO_WEAK');
+    if (Math.sign(shortPs) === Math.sign(longPs)) return NO_BET_OUTPUT('WINDOWS_AGREE');
+    // Short vs long conflict → attack recency signal, follow long-term
+    const longSide: AIVote = longPs > 0 ? 'B' : 'P';
+    const conf = Math.min(40 + Math.round(Math.abs(longPs) * 55), 78);
+    return { vote: longSide, confidence: conf, pressureScore: longSide === 'B' ? conf : -conf, numberPressure: dominantBand(bp.slice(-8)), rejectionReason: 'ADV_RECENCY_ATTACK' };
+  }
+
+  if (id === 'n07_regime_skeptic') {
+    if (bp.length < 8) return NO_BET_OUTPUT('INSUFFICIENT_DATA');
+    if (gs.regime !== 'mix' && gs.volatility !== 'H') return NO_BET_OUTPUT('REGIME_IS_STABLE');
+    if (apparentSide === 'NO_VOTE') return NO_BET_OUTPUT('NO_APPARENT_SIGNAL');
+    const conf = gs.volatility === 'H' && gs.regime === 'mix' ? 60 : 48;
+    const side = oppSide(apparentSide);
+    return { vote: side, confidence: conf, pressureScore: side === 'B' ? conf : -conf, numberPressure: 'MIXED', rejectionReason: 'ADV_REGIME_SKEPTIC' };
+  }
+
+  if (id === 'n08_transition_attack') {
+    if (bp.length < 10) return NO_BET_OUTPUT('INSUFFICIENT_DATA');
+    const mid    = Math.floor(bp.length / 2);
+    const first  = bp.slice(0, mid);
+    const second = bp.slice(mid);
+    let fAlts = 0, sAlts = 0;
+    for (let i = 1; i < first.length;  i++) if (first[i].side  !== first[i-1].side)  fAlts++;
+    for (let i = 1; i < second.length; i++) if (second[i].side !== second[i-1].side) sAlts++;
+    const rFirst  = first.length  > 1 ? fAlts / (first.length  - 1) : 0.5;
+    const rSecond = second.length > 1 ? sAlts / (second.length - 1) : 0.5;
+    if (Math.abs(rFirst - rSecond) < 0.28) return NO_BET_OUTPUT('NO_REGIME_SHIFT');
+    if (apparentSide === 'NO_VOTE') return NO_BET_OUTPUT('NO_APPARENT_SIGNAL');
+    const conf = Math.min(40 + Math.round(Math.abs(rFirst - rSecond) * 80), 78);
+    const side = oppSide(apparentSide);
+    return { vote: side, confidence: conf, pressureScore: side === 'B' ? conf : -conf, numberPressure: 'MIXED', rejectionReason: 'ADV_TRANSITION' };
+  }
+
+  if (id === 'n09_number_trap') {
+    if (bp.length < 5) return NO_BET_OUTPUT('INSUFFICIENT_DATA');
+    const recent   = bp.slice(-7);
+    const lowRatio = recent.filter(e => e.band === 'LOW').length / recent.length;
+    if (lowRatio < 0.62) return NO_BET_OUTPUT('NUMBERS_QUALITY_OK');
+    if (apparentSide === 'NO_VOTE') return NO_BET_OUTPUT('NO_APPARENT_SIGNAL');
+    const conf = Math.min(35 + Math.round(lowRatio * 55), 78);
+    const side = oppSide(apparentSide);
+    return { vote: side, confidence: conf, pressureScore: side === 'B' ? conf : -conf, numberPressure: 'LOW', rejectionReason: 'ADV_NUMBER_TRAP' };
+  }
+
+  if (id === 'n10_entropy_guard') {
+    if (bp.length < 8) return NO_BET_OUTPUT('INSUFFICIENT_DATA');
+    const ent = sideEntropy(bp.slice(-12));
+    if (ent <= 0.87) return NO_BET_OUTPUT('ENTROPY_ACCEPTABLE');
+    if (ent > 0.93 && apparentSide !== 'NO_VOTE') {
+      // Extreme chaos: actively vote against whatever signal exists
+      const conf = Math.min(Math.round((ent - 0.87) * 500), 72);
+      const side = oppSide(apparentSide);
+      return { vote: side, confidence: conf, pressureScore: side === 'B' ? conf : -conf, numberPressure: 'LOW', rejectionReason: 'ADV_CHAOS_ATTACK' };
+    }
+    return NO_BET_OUTPUT('ADV_ENTROPY_BLOCK');
+  }
+
+  return NO_BET_OUTPUT('UNKNOWN_ADVERSARIAL_AGENT');
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -1151,6 +1187,7 @@ export function runVoters(
   _archives: ArchivedShoe[],
   prevVoters: VoterOut[],
   mem: AIStateKeyMemory,
+  ptm: PatternTypeMemory,
 ): { voters: VoterOut[]; globalShoeState: GlobalShoeState; decision: FinalDecision } {
   const handIndex = hands.length;
   const isEarlyShoe = handIndex <= EARLY_SHOE_THRESHOLD;
@@ -1206,7 +1243,7 @@ export function runVoters(
     const { voteStatus, hotCold, voteType: memVT, skAccuracy, skSamples } = computeVoteStatus(memEntry, isEarlyShoe);
 
     // Run the pressure agent (private analysis)
-    const agentOut = runAgent(cfg, hands, encoded, globalShoeState);
+    const agentOut = runAgent(cfg, hands, encoded, globalShoeState, ptm);
 
     // Compute self-awareness
     const sa = computeSelfAwareness(agentOut, encoded);
@@ -1287,11 +1324,22 @@ export function runVoters(
   const noVoteCount = finalVoters.filter(v => v.vote === 'NO_VOTE').length;
   const total       = finalVoters.length; // always 50
 
+  const currentPatternType = classifyCurrentPatternType(encoded);
+
   let recommendation: AIVote = 'NO_VOTE';
   let noBetReason = '';
   if (bCount >= 30)      { recommendation = 'B'; }
   else if (pCount >= 30) { recommendation = 'P'; }
   else                   { noBetReason = 'BELOW_30_VOTE_THRESHOLD'; }
+
+  // Environment quality gate: suppress recommendation when this pattern type has historically failed
+  if (recommendation !== 'NO_VOTE') {
+    const ptEntry = ptm[currentPatternType];
+    if (ptEntry.trials >= 6 && ptEntry.hits / ptEntry.trials < 0.38) {
+      recommendation = 'NO_VOTE';
+      noBetReason = `ENV_GATE_${currentPatternType.toUpperCase()}_FAILING`;
+    }
+  }
 
   const winVotePct = Math.max(bCount, pCount) / total * 100;
   const sorted2    = [bCount, pCount, tCount].sort((a, b) => b - a);
@@ -1324,6 +1372,7 @@ export function runVoters(
       highestVote,
       ensembleConfidence,
       agreementCount: total - noVoteCount,
+      patternType: currentPatternType,
     },
   };
 }
@@ -1379,6 +1428,31 @@ export function archiveVoters(voters: VoterOut[]): VoterOut[] {
     entropyWarning: false, sideOnlyWarning: false, contradictionWarning: false,
     peerReviewChanged: false, peerReviewReason: '', selfAwarenessOverride: '',
   }));
+}
+
+export function initPatternTypeMemory(): PatternTypeMemory {
+  return {
+    dragon:       { hits: 0, trials: 0 },
+    chop:         { hits: 0, trials: 0 },
+    highPressure: { hits: 0, trials: 0 },
+    mixed:        { hits: 0, trials: 0 },
+  };
+}
+
+export function updatePatternTypeMemory(
+  ptm: PatternTypeMemory,
+  patternType: string,
+  recommendation: AIVote,
+  actualSide: Side,
+): PatternTypeMemory {
+  if (recommendation === 'NO_VOTE' || recommendation === 'T') return ptm;
+  const key = patternType as keyof PatternTypeMemory;
+  if (!ptm[key]) return ptm;
+  const wasCorrect = recommendation === actualSide;
+  return {
+    ...ptm,
+    [key]: { hits: ptm[key].hits + (wasCorrect ? 1 : 0), trials: ptm[key].trials + 1 },
+  };
 }
 
 export function calcAccuracy(correct: number, wrong: number): number {

@@ -1,0 +1,150 @@
+REAL_FIX:
+
+  PROBLEM_1:
+    name: Fake intelligence loop
+
+    current:
+      agents_vote
+      ui_shows_percent
+      tests_run
+      but:
+        no_real_edge_measurement
+
+    fix:
+      every_signal_must_be_scored_against_actual_next_hand
+
+  PROBLEM_2:
+    name: BDP is lying
+
+    current:
+      BDP_shows_high_percent
+      but_accuracy_low
+
+    reason:
+      BDP_measures_internal_pressure
+      not_predictive_success
+
+    fix:
+      separate:
+        - pressure_score
+        - actual_prediction_accuracy
+
+      never_mix_them
+
+  PROBLEM_3:
+    name: Too many fake filters
+
+    current:
+      entropy
+      truth_gate
+      skip
+      integrity
+      edge_gate
+
+    result:
+      agents_never_reach_real_execution
+
+    fix:
+      keep_tests_as_information_only
+      never_as_hard_veto
+
+  PROBLEM_4:
+    name: Agents are not truly independent
+
+    current:
+      many_agents
+      same_source
+
+    result:
+      fake_consensus
+
+    fix:
+      divide_agents_into_real_specialists
+
+      10:
+        raw_sequence
+
+      10:
+        road_structure
+
+      10:
+        pressure_transitions
+
+      10:
+        stochastic_math
+
+      10:
+        adversarial_critics
+
+  PROBLEM_5:
+    name: No adversarial destruction
+
+    current:
+      agents_try_to_predict
+
+    missing:
+      agents_try_to_destroy_predictions
+
+    fix:
+      half_the_system_should_attack_the_other_half
+
+  PROBLEM_6:
+    name: No memory of failed pattern types
+
+    fix:
+      store:
+        - fake_dragons
+        - failed_high_pressure
+        - failed_chop
+        - failed_entropy_breaks
+
+      then:
+        punish_pattern_type
+        not_agent
+
+  PROBLEM_7:
+    name: Wrong objective
+
+    current:
+      trying_to_predict_every_hand
+
+    fix:
+      detect_only_high_quality_environments
+
+      target:
+        fewer_bets
+        higher_accuracy
+
+  PROBLEM_8:
+    name: Casino-road illusion
+
+    brutal_truth:
+      roads_are_visual_compression
+      not_hidden_math
+
+    fix:
+      use_roads_as_context_only
+      not_main_predictor
+
+  PROBLEM_9:
+    name: Missing environment model
+
+    fix:
+      classify_shoe_first:
+        - chaos
+        - chop
+        - trend
+        - unstable
+        - exhaustion
+
+      only_then_predict
+
+  PROBLEM_10:
+    name: UI pretending to be edge
+
+    brutal_truth:
+      current_UI_looks_like_quant_terminal
+      but_core_logic_is_still_majority_vote
+
+    real_fix:
+      simplify_decision_layer

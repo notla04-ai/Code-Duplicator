@@ -3,11 +3,11 @@ import type {
   Side, HandResult, VoterOut, FinalDecision, PerformanceStats,
   ArchivedShoe, AppState, AIStateKeyMemory, GlobalShoeState,
   Trigger, TriggerAlert, TriggerCondition, TriggerType, ConsensusLevel,
-  DecisionMatch, NumericMatcher, AIVote, PairFlags,
+  DecisionMatch, NumericMatcher, AIVote, PairFlags, PatternTypeMemory,
 } from "./lib/types";
 import {
   initVoters, runVoters, updateVoterStats, archiveVoters,
-  calcAccuracy, recordStateKeyOutcome,
+  calcAccuracy, recordStateKeyOutcome, initPatternTypeMemory, updatePatternTypeMemory,
 } from "./lib/ai-engine";
 import {
   buildBeadRoad, buildBigRoad, buildBigEyeBoy, buildSmallRoad, buildCockroachPig,
@@ -65,6 +65,7 @@ function makeInitialDecision(): FinalDecision {
     noVoteCount: 50, totalActiveVotes: 0,
     winVotePct: 0, voteGapPct: 0, consensus: "NO_BET",
     highestVote: "NO_VOTE", ensembleConfidence: 0, agreementCount: 0,
+    patternType: 'mixed' as const,
   };
 }
 
@@ -89,6 +90,7 @@ function buildInitialState(saved: Partial<AppState>): AppState {
     archivedShoes: saved.archivedShoes ?? [],
     voters,
     aiStateKeyMemory: saved.aiStateKeyMemory ?? {},
+    patternTypeMemory: (saved.patternTypeMemory as PatternTypeMemory | undefined) ?? initPatternTypeMemory(),
     finalDecision: saved.finalDecision ?? makeInitialDecision(),
     globalShoeState: saved.globalShoeState ?? makeEmptyGSS(),
     performance: saved.performance ? { ...ep, ...saved.performance } : ep,
@@ -1446,11 +1448,13 @@ export default function App() {
       let updatedHVPerf = { ...prev.highestVotePerf };
       let updatedPnL = { ...prev.pnl };
       let updatedMem: AIStateKeyMemory = prev.aiStateKeyMemory;
+      let updatedPTM: PatternTypeMemory = prev.patternTypeMemory;
       let extraTriggers: Trigger[] = [];
 
       if (prev.pendingDecision) {
         const pd = prev.pendingDecision;
         updatedVoters = updateVoterStats(prev.voters, side);
+        updatedPTM = updatePatternTypeMemory(updatedPTM, pd.patternType, pd.recommendation, side);
         for (const v of prev.voters) {
           if (v.vote !== 'NO_VOTE' && v.stateKey && v.stateKey !== 'ND') {
             updatedMem = recordStateKeyOutcome(updatedMem, v.id, v.stateKey, v.vote, side, handIndex);
@@ -1533,7 +1537,7 @@ export default function App() {
       }
 
       const { voters: newVoters, decision: newDecision, globalShoeState: newGSS } = runVoters(
-        newActiveShoe, prev.archivedShoes, updatedVoters, updatedMem
+        newActiveShoe, prev.archivedShoes, updatedVoters, updatedMem, updatedPTM
       );
 
       const allTriggers = [...prev.triggers, ...extraTriggers];
@@ -1543,7 +1547,7 @@ export default function App() {
       return {
         ...prev,
         activeShoe: newActiveShoe, voters: newVoters,
-        aiStateKeyMemory: updatedMem,
+        aiStateKeyMemory: updatedMem, patternTypeMemory: updatedPTM,
         finalDecision: newDecision, globalShoeState: newGSS,
         pendingDecision: newDecision,
         performance: updatedPerf, highestVotePerf: updatedHVPerf,
@@ -1567,7 +1571,7 @@ export default function App() {
     setState(prev => {
       pushUndo(prev);
       const newShoe = prev.activeShoe.filter(h => h.id !== id);
-      const { voters: nv, decision: nd, globalShoeState: ng } = runVoters(newShoe, prev.archivedShoes, prev.voters, prev.aiStateKeyMemory);
+      const { voters: nv, decision: nd, globalShoeState: ng } = runVoters(newShoe, prev.archivedShoes, prev.voters, prev.aiStateKeyMemory, prev.patternTypeMemory);
       return { ...prev, activeShoe: newShoe, voters: nv, finalDecision: nd, globalShoeState: ng, pendingDecision: nd };
     });
   }, []);
@@ -1584,7 +1588,7 @@ export default function App() {
         newArchivedShoes = [{ id: Date.now(), hands: prev.activeShoe, bankerPct: Math.round(bC / total * 100), playerPct: Math.round(pC / total * 100), tiePct: Math.round(tC / total * 100), totalHands: total, timestamp: Date.now() }, ...prev.archivedShoes].slice(0, 20);
       }
       const archivedVoters = archiveVoters(prev.voters);
-      const { voters: nv, decision: nd, globalShoeState: ng } = runVoters([], newArchivedShoes, archivedVoters, prev.aiStateKeyMemory);
+      const { voters: nv, decision: nd, globalShoeState: ng } = runVoters([], newArchivedShoes, archivedVoters, prev.aiStateKeyMemory, prev.patternTypeMemory);
       return {
         ...prev, activeShoe: [], shoeNumber: prev.shoeNumber + 1,
         archivedShoes: newArchivedShoes, voters: nv, finalDecision: nd, globalShoeState: ng,
@@ -1613,7 +1617,7 @@ export default function App() {
   }, []);
 
   const clearAllMemory = useCallback(() => {
-    setState(prev => ({ ...prev, archivedShoes: [], voters: initVoters(), aiStateKeyMemory: {}, finalDecision: makeInitialDecision(), globalShoeState: makeEmptyGSS(), pendingDecision: null, triggerAlerts: [] }));
+    setState(prev => ({ ...prev, archivedShoes: [], voters: initVoters(), aiStateKeyMemory: {}, patternTypeMemory: initPatternTypeMemory(), finalDecision: makeInitialDecision(), globalShoeState: makeEmptyGSS(), pendingDecision: null, triggerAlerts: [] }));
     setClearConfirm(false);
     undoStack.current = [];
     setVisibleAlerts([]);
