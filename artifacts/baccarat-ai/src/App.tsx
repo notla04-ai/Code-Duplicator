@@ -54,7 +54,6 @@ function makeEmptyGSS(): GlobalShoeState {
     regime: 'nd', texture: 'nd', volatility: 'L',
     streak: { side: null, length: 0 }, trend: 'nd', phase: 'early',
     dominantSide: 'equal', regimeVotes: {}, textureVotes: {}, aiContrib: {},
-    patterns: { c2b: 'nd', death: false, mirror: 'nd', sevens: null },
     handCount: 0,
   };
 }
@@ -457,8 +456,6 @@ function GlobalShoeStatePanel({ gss }: { gss: GlobalShoeState }) {
   const strColor = strSide === 'B' ? '#ff4444' : strSide === 'P' ? '#4488ff' : '#444';
   const trendColor = gss.trend === 'up' ? '#44dd88' : gss.trend === 'dn' ? '#ff4444' : '#666';
   const domColor = gss.dominantSide === 'B' ? '#ff4444' : gss.dominantSide === 'P' ? '#4488ff' : '#666';
-  const pat = gss.patterns;
-
   const topVotes = Object.entries(gss.regimeVotes).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).slice(0, 3);
   const contribs = Object.entries(gss.aiContrib).slice(0, 8);
 
@@ -470,8 +467,6 @@ function GlobalShoeStatePanel({ gss }: { gss: GlobalShoeState }) {
           <span style={{ color: '#2a4a2a', fontSize: 7 }}>50 AI Consensus · {gss.handCount} hands</span>
           <span style={{ color: regColor, fontSize: 8, fontWeight: 700 }}>{gss.regime.toUpperCase()}</span>
           {strSide && <span style={{ color: strColor, fontSize: 7 }}>{strSide}×{gss.streak.length}</span>}
-          {pat.death && <span style={{ color: '#ff4444', fontSize: 7, background: '#ff444415', padding: '1px 3px', borderRadius: 2 }}>DEATH</span>}
-          {pat.sevens && <span style={{ color: '#ddcc44', fontSize: 7, background: '#ddcc4415', padding: '1px 3px', borderRadius: 2 }}>7s→{pat.sevens.signal}</span>}
         </div>
         <span style={{ color: '#333', fontSize: 9 }}>{open ? '▲' : '▼'}</span>
       </div>

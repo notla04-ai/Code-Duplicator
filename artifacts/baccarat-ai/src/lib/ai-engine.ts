@@ -934,55 +934,6 @@ function avgRunLen(bp: Side[]): string {
   return avg < 1.5 ? "ch" : avg > 2.5 ? "tr" : "mx";
 }
 
-function detectC2BPattern(bp: Side[]): GlobalShoeState["patterns"]["c2b"] {
-  if (bp.length < 4) return "nd";
-  const last4 = bp.slice(-4);
-  const [a, b, c, d] = last4;
-  const isWait1 = a === "B" && b === "B" && c === "P" && d === "P";
-  const isWait2 = a === "B" && b === "P" && c === "P" && d === "B";
-  if (isWait1 || isWait2) return "WAIT";
-  if (bp.length >= 5) {
-    const prev5 = bp.slice(-5);
-    const [wa, wb, wc, wd, cur] = prev5;
-    if (wa === "B" && wb === "B" && wc === "P" && wd === "P") return cur === "B" ? "BET_P" : "BET_B";
-    if (wa === "B" && wb === "P" && wc === "P" && wd === "B") return cur === "P" ? "BET_B" : "BET_P";
-  }
-  return "nd";
-}
-
-function detectDeathPattern(bp: Side[]): boolean {
-  if (bp.length < 6) return false;
-  const last6 = bp.slice(-6);
-  let alts = 0;
-  for (let i = 1; i < last6.length; i++) if (last6[i] !== last6[i - 1]) alts++;
-  return alts === 5;
-}
-
-function detectMirrorPattern(bp: Side[]): GlobalShoeState["patterns"]["mirror"] {
-  if (bp.length < 4) return "nd";
-  const rl = runLen(bp);
-  if (rl < 2) return "nd";
-  const last = bp[bp.length - 1];
-  let prevRunStart = bp.length - rl - 1;
-  let prevRun = 0;
-  while (prevRunStart >= 0 && bp[prevRunStart] !== last) { prevRun++; prevRunStart--; }
-  if (prevRun === 0) return "nd";
-  return Math.abs(rl - prevRun) <= 1 ? "MIRROR" : "NO_MIRROR";
-}
-
-function detectSevensPattern(hands: HandResult[]): GlobalShoeState["patterns"]["sevens"] {
-  if (hands.length < 2) return null;
-  const last = hands[hands.length - 1];
-  const prev = hands[hands.length - 2];
-  if (prev.number === 2 && last.number === 5) {
-    const opp: AIVote = last.side === "B" ? "P" : "B";
-    return { signal: opp, reason: "2→5: bet opposite" };
-  }
-  if (prev.number === 9 && last.number === 8) return { signal: "B", reason: "9→8: bet banker" };
-  if (last.number === 7) return { signal: "P", reason: "7: bet player" };
-  if (prev.number === 7) return { signal: "P", reason: "prev 7: bet player again" };
-  return null;
-}
 
 // ─── Global Shoe State (50 AI Consensus) ─────────────────────────────────────
 
@@ -993,8 +944,7 @@ export function computeGlobalShoeState(hands: HandResult[]): GlobalShoeState {
   if (n === 0) return {
     regime: "nd", texture: "nd", volatility: "L",
     streak: { side: null, length: 0 }, trend: "nd", phase: "early",
-    dominantSide: "equal", regimeVotes: {}, textureVotes: {}, aiContrib: {},
-    patterns: { c2b: "nd", death: false, mirror: "nd", sevens: null }, handCount: 0,
+    dominantSide: "equal", regimeVotes: {}, textureVotes: {}, aiContrib: {}, handCount: 0,
   };
 
   const regimeVotes: Record<string, number> = { trend: 0, chop: 0, mix: 0, nd: 0 };
@@ -1059,10 +1009,6 @@ export function computeGlobalShoeState(hands: HandResult[]): GlobalShoeState {
   textureVotes[texNseq] = (textureVotes[texNseq] || 0) + 1;
   aiContrib["NSEQ"] = texNseq;
 
-  const c2bSig = detectC2BPattern(bp);
-  const texC2B: string = c2bSig === "WAIT" ? "mix" : c2bSig !== "nd" ? "smooth" : "mix";
-  textureVotes[texC2B] = (textureVotes[texC2B] || 0) + 1;
-  aiContrib["C2B"] = texC2B;
 
   const sortedRegime = Object.entries(regimeVotes).filter(([k]) => k !== "nd").sort((a, b) => b[1] - a[1]);
   const regime: GlobalShoeState["regime"] = bp.length < 6 ? "nd" : ((sortedRegime[0]?.[0] ?? "mix") as GlobalShoeState["regime"]);
@@ -1078,12 +1024,7 @@ export function computeGlobalShoeState(hands: HandResult[]): GlobalShoeState {
   const pCount = bp.filter((s) => s === "P").length;
   const dominantSide: GlobalShoeState["dominantSide"] = bCount > pCount * 1.15 ? "B" : pCount > bCount * 1.15 ? "P" : "equal";
 
-  const c2b = detectC2BPattern(bp);
-  const death = detectDeathPattern(bp);
-  const mirror = detectMirrorPattern(bp);
-  const sevens = detectSevensPattern(hands);
-
-  return { regime, texture, volatility, streak: { side: lastBP, length: rl }, trend, phase, dominantSide, regimeVotes, textureVotes, aiContrib, patterns: { c2b, death, mirror, sevens }, handCount: n };
+  return { regime, texture, volatility, streak: { side: lastBP, length: rl }, trend, phase, dominantSide, regimeVotes, textureVotes, aiContrib, handCount: n };
 }
 
 // ─── Memory ────────────────────────────────────────────────────────────────────

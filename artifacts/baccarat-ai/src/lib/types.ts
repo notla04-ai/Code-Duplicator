@@ -39,12 +39,6 @@ export interface GlobalShoeState {
   regimeVotes: Record<string, number>;
   textureVotes: Record<string, number>;
   aiContrib: Record<string, string>;
-  patterns: {
-    c2b: 'WAIT' | 'BET_B' | 'BET_P' | 'nd';
-    death: boolean;
-    mirror: 'MIRROR' | 'NO_MIRROR' | 'nd';
-    sevens: { signal: AIVote; reason: string } | null;
-  };
   handCount: number;
 }
 
