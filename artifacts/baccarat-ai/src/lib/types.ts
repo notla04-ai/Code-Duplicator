@@ -85,6 +85,18 @@ export interface VoterOut {
   agentStrength?: AgentStrength;
   rejectionReason?: string;
   agentGroup?: string;
+  // ─── Self-Awareness Layer ─────────────────────────────────────────────────
+  uncertaintyScore?: number;     // 0.00-1.00
+  fakePatternRisk?: number;      // 0.00-1.00
+  entropyWarning?: boolean;
+  sideOnlyWarning?: boolean;
+  contradictionWarning?: boolean;
+  wrongStreak?: number;          // consecutive wrong predictions
+  inCooldown?: boolean;
+  cooldownHandsLeft?: number;
+  peerReviewChanged?: boolean;
+  peerReviewReason?: string;
+  selfAwarenessOverride?: string; // reason hard rule fired
 }
 
 export interface HandResult {
