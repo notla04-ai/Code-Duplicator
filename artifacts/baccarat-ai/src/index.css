@@ -1,0 +1,94 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --font-sans: var(--app-font-sans);
+  --font-mono: var(--app-font-mono);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+}
+
+:root {
+  --background: 0 0% 4%;
+  --foreground: 0 0% 90%;
+  --border: 0 0% 14%;
+  --card: 0 0% 7%;
+  --card-foreground: 0 0% 90%;
+  --muted: 0 0% 12%;
+  --muted-foreground: 0 0% 50%;
+  --primary: 210 100% 60%;
+  --primary-foreground: 0 0% 100%;
+  --accent: 0 0% 16%;
+  --accent-foreground: 0 0% 90%;
+  --input: 0 0% 14%;
+  --ring: 210 100% 60%;
+  --app-font-sans: 'Inter', 'SF Pro Display', -apple-system, sans-serif;
+  --app-font-mono: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+  --radius: 3px;
+}
+
+@layer base {
+  * { @apply border-border; box-sizing: border-box; }
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--app-font-sans);
+    font-size: 11px;
+    line-height: 1.3;
+    margin: 0;
+    padding: 0;
+  }
+}
+
+.banker-color { color: #ff4444; }
+.player-color { color: #4488ff; }
+.tie-color { color: #44dd88; }
+.no-bet-color { color: #888888; }
+
+.banker-bg { background: #ff4444; }
+.player-bg { background: #4488ff; }
+.tie-bg { background: #44dd88; }
+
+.banker-border { border-color: #ff4444; }
+.player-border { border-color: #4488ff; }
+.tie-border { border-color: #44dd88; }
+
+.circle-banker { background: transparent; border: 2px solid #ff4444; color: #ff4444; }
+.circle-player { background: transparent; border: 2px solid #4488ff; color: #4488ff; }
+.circle-tie    { background: transparent; border: 2px solid #44dd88; color: #44dd88; }
+.circle-unknown{ background: transparent; border: 2px solid #444; color: #666; }
+
+::-webkit-scrollbar { width: 3px; height: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+
+@keyframes slideInRight {
+  from { transform: translateX(110%); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+@keyframes fadeOut {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+.trigger-alert-enter {
+  animation: slideInRight 0.35s ease-out forwards;
+}
+.trigger-alert-exit {
+  animation: fadeOut 0.4s ease-in forwards;
+}

@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Baccarat AI"
+version = "1.0.0"
+id = "artifacts/baccarat-ai"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 19429
+
+[services.development]
+run = "pnpm --filter @workspace/baccarat-ai run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/baccarat-ai", "run", "build" ]
+publicDir = "artifacts/baccarat-ai/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "19429"
+BASE_PATH = "/"

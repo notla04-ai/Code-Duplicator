@@ -1,44 +1,49 @@
-# [Project name]
+# Baccarat AI
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+A real-time baccarat prediction tool powered by a 50-AI ensemble voting system with full casino scoreboard rendering and statistical analysis.
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
+- `pnpm --filter @workspace/baccarat-ai run dev` — run the frontend (auto-started via workflow)
+- `pnpm --filter @workspace/api-server run dev` — run the API server (port 8080)
 - `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
 
 ## Stack
 
 - pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5
-- DB: PostgreSQL + Drizzle ORM
-- Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
+- Frontend: React 19 + Vite 7 + TailwindCSS 4
+- State: localStorage persistence (`baccarat_ai_v6` key)
+- No backend required — pure client-side logic
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/baccarat-ai/src/App.tsx` — full app UI (~125KB, single-file component)
+- `artifacts/baccarat-ai/src/lib/ai-engine.ts` — 50-agent voter system, pressure encoding, state-key memory
+- `artifacts/baccarat-ai/src/lib/analysis.ts` — stochastic analysis engine, entropy, trap detection
+- `artifacts/baccarat-ai/src/lib/scoreboards.ts` — Bead Road, Big Road, Big Eye Boy, Small Road, Cockroach Pig
+- `artifacts/baccarat-ai/src/lib/types.ts` — all shared TypeScript types
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- All game state lives in `localStorage` — no database or server needed
+- 50 AI voters each have independent state-key memory to track pattern accuracy
+- The Big Road uses WoO-standard dragon-tail algorithm for overflow columns
+- Derived roads (Big Eye Boy / Small Road / Cockroach Pig) use offset-based algorithm
+- Trigger system fires alerts on configurable pattern conditions with cooldown hands
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+Users enter baccarat hand results (Banker/Player/Tie with final card numbers) and the AI ensemble votes on the next hand recommendation. The app tracks performance statistics, archives completed shoes, and renders casino-standard scoreboards in real time.
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+_Populate as you build._
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- The app is entirely frontend-only — do not add a backend dependency for game logic
+- `baccarat_ai_v6` is the localStorage key; changing it resets all user data
+- The AI engine uses pressure bands (LOW / HIGH / STRONG_HIGH / KILL_SHOT) based on final card numbers
 
 ## Pointers
 
