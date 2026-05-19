@@ -1,0 +1,163 @@
+payts na ni? 
+END_SHOE_EXPORT_BUTTON:
+
+  button_label: "END SHOE / DOWNLOAD AUDIT DATA"
+
+  when_clicked:
+    freeze_current_shoe: true
+    stop_new_predictions: true
+    generate_download_files:
+      - shoe_summary.json
+      - every_hand_log.json
+      - agent_50_everyhand_votes.csv
+      - agent_50_everyhand_features.json
+      - consensus_decisions.csv
+      - scorecard_roads.json
+      - statistical_tests.json
+      - improvement_gaps.json
+
+  every_hand_log_must_include:
+    - hand_number
+    - actual_result: B | P | T
+    - final_number: 0-9
+    - encoded_state
+    - bead_road_position
+    - big_road_position
+    - shoe_regime
+    - entropy_score
+    - transition_state
+    - final_consensus_signal
+    - win_loss_skip_result
+
+  each_agent_everyhand_must_include:
+    - agent_id
+    - agent_name
+    - assigned_view
+    - input_features_seen
+    - vote: B | P | NO_BET
+    - pressure_score
+    - confidence
+    - reason
+    - rejection_reason
+    - peer_info_received
+    - changed_vote_after_peer_review
+    - missing_info_detected
+    - what_would_help_next_time
+
+  improvement_gaps:
+    detect:
+      - agents_using_same_info
+      - agents_missing_final_number
+      - agents_missing_road_context
+      - agents_wrong_despite_high_confidence
+      - agents_voting_without_statistical_support
+      - fake_signal_patterns
+      - features_that_were_not_available
+      - features_that_would_have_changed_vote
+
+  export_format:
+    zip_name: "baccarat_shoe_audit_${shoe_id}.zip"
+
+
+Add an END SHOE / DOWNLOAD AUDIT DATA button that exports the full shoe history, all 50 agents’ per-hand votes, features seen, reasons, peer broadcasts, consensus result, scorecard roads, statistical tests, and improvement gaps into a downloadable ZIP so I can upload it later for analysis and agent improvement.
+
+Add an EDIT button to every one of the 50 AI agent cards.
+
+When clicked, open an Agent Editor Drawer with tabs:
+
+1. SKILL
+- agent name
+- skill description
+- skillTag
+- assigned role
+- rejection rules
+
+2. VIEWS
+- enabled feature views
+- side + final number + pressure inputs
+- road views used
+- entropy/regime inputs used
+
+3. ENGINE
+- main engine mode:
+  RAW_SEQUENCE
+  ROAD_STRUCTURE
+  PRESSURE_TRANSITION
+  STOCHASTIC_TEST
+  ADVERSARIAL_CRITIC
+  CONSENSUS_JUDGE
+
+4. MEMORY
+- stateKey
+- samples
+- wins
+- losses
+- accuracy
+- common failure reason
+
+5. DEBUG
+- last vote
+- last confidence
+- last pressureScore
+- last rejectionReason
+- evidence used
+
+Requirements:
+- Save edits to localStorage under existing baccarat_ai_v6 state.
+- Do not add backend.
+- Add fields to VoterOut / agent config.
+- Agent edits must immediately affect next hand voting.
+- Add Reset Agent button.
+- Add Export Agent Config JSON button.
+- Add Import Agent Config JSON button.
+
+
+Add an EDIT button on every 50 AI agent panel/card.
+
+Button behavior:
+- Each agent card must show a small EDIT button in the top-right corner.
+- Clicking EDIT opens Agent Editor Drawer for that specific agent only.
+- The drawer must load that agent’s current config.
+- Saving updates only that agent.
+- Changes apply immediately on the next hand.
+
+Agent Editor Drawer fields:
+1. Agent Name
+2. Skill Description
+3. Main Engine Type
+4. Enabled Feature Views
+5. Required Inputs
+6. Rejection Rules
+7. Self-Awareness Checks
+8. NO_BET Conditions
+9. Debug Notes
+10. Reset Agent
+11. Export Agent JSON
+12. Import Agent JSON
+
+Storage:
+- Save configs in localStorage.
+- Key: baccarat_ai_agent_configs_v1
+- Each config saved by agent_id.
+
+Rule:
+- Do not edit all agents globally unless user clicks GLOBAL EDIT.
+- Every agent must be editable one-by-one from its own panel.
+
+FINAL_ADDON:
+  features:
+    - END_SHOE_DOWNLOAD_AUDIT_DATA
+    - EDIT_BUTTON_PER_AGENT_CARD
+    - AGENT_EDITOR_DRAWER
+
+  storage:
+    main_state: baccarat_ai_v6
+    agent_configs_key: baccarat_ai_agent_configs_v1
+
+  must_fix:
+    - use one EDIT spec only
+    - END_SHOE export must include agent configs too
+    - every export row needs hand_number + agent_id
+    - imported agent config must validate fields before saving
+    - edits apply next hand, not mid-hand
+    - add GLOBAL EDIT only as optional separate button

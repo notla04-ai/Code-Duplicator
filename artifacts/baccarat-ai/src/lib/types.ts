@@ -234,6 +234,16 @@ export interface TriggerAlert {
   side?: Side;
 }
 
+export interface AgentOverride {
+  enabled: boolean;
+  customName?: string;
+  customSkillDesc?: string;
+  customNotes?: string;
+  engineMode?: string;
+  viewFlags?: Record<string, boolean>;
+}
+export type AgentOverrides = Record<string, AgentOverride>;
+
 export interface AppState {
   activeShoe: HandResult[];
   shoeNumber: number;

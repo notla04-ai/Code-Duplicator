@@ -4,11 +4,14 @@ import type {
   ArchivedShoe, AppState, AIStateKeyMemory, GlobalShoeState,
   Trigger, TriggerAlert, TriggerCondition, TriggerType, ConsensusLevel,
   DecisionMatch, NumericMatcher, AIVote, PairFlags, PatternTypeMemory,
+  AgentOverride, AgentOverrides,
 } from "./lib/types";
 import {
   initVoters, runVoters, updateVoterStats, archiveVoters,
   calcAccuracy, recordStateKeyOutcome, initPatternTypeMemory, updatePatternTypeMemory,
 } from "./lib/ai-engine";
+import { AgentEditorDrawer } from "./AgentEditorDrawer";
+import { generateAuditZip } from "./lib/auditExport";
 import {
   buildBeadRoad, buildBigRoad, buildBigEyeBoy, buildSmallRoad, buildCockroachPig,
   type BeadRoadCell, type BigRoadCell, type DerivedCell,
@@ -22,6 +25,59 @@ import {
 // ─── Storage ───────────────────────────────────────────────────────────────────
 
 const STORAGE_KEY = "baccarat_ai_v6";
+const AGENT_CONFIGS_KEY = "baccarat_ai_agent_configs_v1";
+
+function loadAgentOverrides(): AgentOverrides {
+  try {
+    const raw = localStorage.getItem(AGENT_CONFIGS_KEY);
+    if (raw) return JSON.parse(raw) as AgentOverrides;
+  } catch { /**/ }
+  return {};
+}
+
+function applyAgentOverrides(
+  voters: VoterOut[],
+  decision: FinalDecision,
+  overrides: AgentOverrides,
+): { voters: VoterOut[]; decision: FinalDecision } {
+  const anyDisabled = voters.some(v => overrides[v.id]?.enabled === false && v.vote !== 'NO_VOTE');
+  if (!anyDisabled) return { voters, decision };
+
+  const effectiveVoters = voters.map(v => {
+    if (overrides[v.id]?.enabled === false) {
+      return { ...v, vote: 'NO_VOTE' as AIVote, confidence: 0, rejectionReason: 'DISABLED_BY_USER' };
+    }
+    return v;
+  });
+
+  const bCount = effectiveVoters.filter(v => v.vote === 'B').length;
+  const pCount = effectiveVoters.filter(v => v.vote === 'P').length;
+  const tCount = effectiveVoters.filter(v => v.vote === 'T').length;
+  const noVoteCount = effectiveVoters.length - bCount - pCount - tCount;
+  const total = effectiveVoters.length;
+  const dominantCount = Math.max(bCount, pCount);
+  const winVotePct = total > 0 ? Math.round(dominantCount / total * 1000) / 10 : 0;
+
+  let recommendation: AIVote = 'NO_VOTE';
+  if (bCount >= 30) recommendation = 'B';
+  else if (pCount >= 30) recommendation = 'P';
+
+  const consensus: ConsensusLevel = recommendation === 'NO_VOTE' ? 'NO_BET'
+    : winVotePct >= 80 ? 'VERY_STRONG' : winVotePct >= 70 ? 'STRONG'
+    : winVotePct >= 62 ? 'MEDIUM' : winVotePct >= 55 ? 'WEAK' : 'NO_BET';
+  const highestVote: AIVote = bCount > pCount ? 'B' : pCount > bCount ? 'P' : tCount > 0 ? 'T' : 'NO_VOTE';
+
+  return {
+    voters: effectiveVoters,
+    decision: {
+      ...decision,
+      recommendation,
+      bankerVotes: bCount, playerVotes: pCount, tieVotes: tCount, noVoteCount,
+      winVotePct, highestVote, consensus,
+      agreementCount: bCount + pCount + tCount,
+    },
+  };
+}
 
 function loadState(): Partial<AppState> {
   try {
@@ -926,7 +982,7 @@ function PerfPanel({ title, subtitle, perf, accentColor }: { title: string; subt
 
 // ─── Voter Card ────────────────────────────────────────────────────────────────
 
-function VoterCard({ ai, disabled }: { ai: VoterOut; disabled?: boolean }) {
+function VoterCard({ ai, disabled, onEdit }: { ai: VoterOut; disabled?: boolean; onEdit?: () => void }) {
   const [expanded, setExpanded] = useState(false);
   const acc = calcAccuracy(ai.correct, ai.wrong);
   const voteColor = disabled ? '#2a2a2a' : sideColor(ai.vote);
@@ -951,6 +1007,12 @@ function VoterCard({ ai, disabled }: { ai: VoterOut; disabled?: boolean }) {
           <span style={{ color: regColor, fontSize: 6 }}>{ai.regimeVote}</span>
           <span style={{ color: spColor, fontSize: 6 }}>{ai.reactionSpeed[0]}</span>
           <span style={{ color: hotColdColor, fontSize: 7 }}>{ai.hotCold === 'hot' ? '●' : ai.hotCold === 'cold' ? '○' : '·'}</span>
+          {onEdit && (
+            <button
+              onClick={e => { e.stopPropagation(); onEdit(); }}
+              style={{ background: 'transparent', border: '1px solid #ff884433', color: '#ff8844', fontSize: 5.5, cursor: 'pointer', padding: '1px 3px', borderRadius: 1, fontFamily: 'inherit', lineHeight: 1 }}
+            >EDIT</button>
+          )}
           <button onClick={() => setExpanded(e => !e)} style={{ background: 'transparent', border: 'none', color: '#333', fontSize: 7, cursor: 'pointer', padding: 0 }}>{expanded ? '▲' : '▼'}</button>
         </div>
       </div>
@@ -1409,6 +1471,9 @@ export default function App() {
   const [visibleAlerts, setVisibleAlerts] = useState<TriggerAlert[]>([]);
   const [pendingPairFlags, setPendingPairFlags] = useState<PairFlags>('none');
   const [pendingNatural, setPendingNatural] = useState(false);
+  const [agentOverrides, setAgentOverrides] = useState<AgentOverrides>(() => loadAgentOverrides());
+  const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
+  const [auditExporting, setAuditExporting] = useState(false);
 
   // ── Proper undo stack: stores COMPLETE state snapshots ──────────────────
   const undoStack = useRef<AppState[]>([]);
@@ -1419,6 +1484,11 @@ export default function App() {
 
   useEffect(() => { saveState(state); }, [state]);
 
+  // Persist agent overrides separately
+  useEffect(() => {
+    try { localStorage.setItem(AGENT_CONFIGS_KEY, JSON.stringify(agentOverrides)); } catch { /**/ }
+  }, [agentOverrides]);
+
   // Show newly fired alerts as toasts
   const prevAlertsRef = useRef<TriggerAlert[]>([]);
   useEffect(() => {
@@ -1428,7 +1498,10 @@ export default function App() {
     prevAlertsRef.current = state.triggerAlerts;
   }, [state.triggerAlerts]);
 
-  const { activeShoe, shoeNumber, archivedShoes, voters, finalDecision, globalShoeState, performance, highestVotePerf, pnl, triggers, triggerAlerts, autoSaveSwitch, autoSaveTie } = state;
+  const { activeShoe, shoeNumber, archivedShoes, voters: rawVoters, finalDecision: rawDecision, globalShoeState, performance, highestVotePerf, pnl, triggers, triggerAlerts, autoSaveSwitch, autoSaveTie } = state;
+
+  // Apply per-agent overrides at display time (disabled agents → NO_BET)
+  const { voters, decision: finalDecision } = applyAgentOverrides(rawVoters, rawDecision, agentOverrides);
   const dec = finalDecision;
   const pnlColor = pnl.totalPnL >= 0 ? '#44dd88' : '#ff4444';
   const sesColor = pnl.sessionPnL >= 0 ? '#44dd88' : '#ff4444';
@@ -1648,6 +1721,38 @@ export default function App() {
     setState(prev => ({ ...prev, autoSaveTie: !prev.autoSaveTie }));
   }, []);
 
+  const handleAgentSave = useCallback((agentId: string, override: AgentOverride) => {
+    setAgentOverrides(prev => ({ ...prev, [agentId]: override }));
+  }, []);
+
+  const handleAgentReset = useCallback((agentId: string) => {
+    setAgentOverrides(prev => {
+      const next = { ...prev };
+      delete next[agentId];
+      return next;
+    });
+  }, []);
+
+  const handleAuditExport = useCallback(async () => {
+    if (auditExporting) return;
+    setAuditExporting(true);
+    try {
+      const blob = await generateAuditZip(state, agentOverrides);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `baccarat_shoe_audit_${state.shoeNumber}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Audit export failed', err);
+    } finally {
+      setAuditExporting(false);
+    }
+  }, [state, agentOverrides, auditExporting]);
+
   const dismissToast = useCallback((id: string) => {
     setVisibleAlerts(v => v.filter(a => a.id !== id));
   }, []);
@@ -1693,6 +1798,7 @@ export default function App() {
   const truthGate = analysisReport.truthGate;
 
   return (
+    <>
     <div style={{ minHeight: '100vh', background: '#060606', padding: '8px 12px' }}>
 
       <TriggerAlertToast alerts={visibleAlerts} onDismiss={dismissToast} />
@@ -1741,6 +1847,11 @@ export default function App() {
             <span style={{ color: '#333', fontSize: 7 }}>· {activeShoe.length} hands</span>
             <div style={{ flex: 1 }} />
             <button onClick={archiveShoe} style={{ background: '#111', border: '1px solid #222', color: '#777', fontSize: 8, padding: '2px 7px', borderRadius: 2, cursor: 'pointer', fontFamily: 'inherit' }}>ARCHIVE</button>
+            <button
+              onClick={handleAuditExport}
+              disabled={auditExporting || activeShoe.length === 0}
+              style={{ background: auditExporting ? '#1a1a1a' : '#1a0a05', border: `1px solid ${activeShoe.length === 0 ? '#1a1a1a' : '#ff664433'}`, color: activeShoe.length === 0 ? '#333' : auditExporting ? '#888' : '#ff8844', fontSize: 8, padding: '2px 7px', borderRadius: 2, cursor: activeShoe.length === 0 || auditExporting ? 'default' : 'pointer', fontFamily: 'inherit' }}
+            >{auditExporting ? '⏳ EXPORTING…' : '⊙ END SHOE / AUDIT'}</button>
             <button onClick={newShoe} style={{ background: '#0d2244', border: '1px solid #1a4488', color: '#6699dd', fontSize: 8, padding: '2px 7px', borderRadius: 2, cursor: 'pointer', fontFamily: 'inherit' }}>⊕ NEW SHOE</button>
           </div>
           <div style={{ marginBottom: 3 }}>
@@ -2009,11 +2120,28 @@ export default function App() {
             <span style={{ color: '#444', fontSize: 7 }}>{activeVoters.length}/50 active</span>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 4 }}>
-            {voters.map(v => <VoterCard key={v.id} ai={v} disabled={truthGate.disabledVoterIds.includes(v.id)} />)}
+            {voters.map(v => (
+              <VoterCard
+                key={v.id}
+                ai={v}
+                disabled={truthGate.disabledVoterIds.includes(v.id)}
+                onEdit={() => setEditingAgentId(v.id)}
+              />
+            ))}
           </div>
         </div>
 
       </div>
     </div>
+
+    <AgentEditorDrawer
+      agentId={editingAgentId}
+      voter={editingAgentId ? (voters.find(v => v.id === editingAgentId) ?? rawVoters.find(v => v.id === editingAgentId) ?? null) : null}
+      overrides={agentOverrides}
+      onSave={handleAgentSave}
+      onReset={handleAgentReset}
+      onClose={() => setEditingAgentId(null)}
+    />
+    </>
   );
 }
